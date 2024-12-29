@@ -1,47 +1,80 @@
 # 載入必要套件
-if (!requireNamespace("tidyverse", quietly = TRUE)) {
-  message("tidyverse 尚未安裝，正在安裝中...")
-  install.packages("tidyverse")
-}
-library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
 
-# 匯入 CSV 檔案
-data_110 <- read_csv("110.csv")
-data_111 <- read_csv("111.csv")
-data_112 <- read_csv("112.csv")
+# 假設資料已經存在，這裡會使用一些範例資料
+# data_110, data_111, data_112 是您的原始資料集
 
-# 計算每年總出生數、男生出生數和女生出生數
-total_110 <- data_110 %>%
-  summarise(總出生數 = sum(出生數計),
-            男生出生數 = sum(出生數男),
-            女生出生數 = sum(出生數女)) %>%
-  mutate(年份 = "110年")
+# 合併三個資料集並添加年份資訊
+age_births <- bind_rows(
+  data_110 %>% mutate(年份 = "110年"),
+  data_111 %>% mutate(年份 = "111年"),
+  data_112 %>% mutate(年份 = "112年")
+)
 
-total_111 <- data_111 %>%
-  summarise(總出生數 = sum(出生數計),
-            男生出生數 = sum(出生數男),
-            女生出生數 = sum(出生數女)) %>%
-  mutate(年份 = "111年")
+# 計算總出生數
+total_births <- age_births %>%
+  group_by(年份) %>%
+  summarise(
+    出生數男 = sum(出生數男, na.rm = TRUE),
+    出生數女 = sum(出生數女, na.rm = TRUE),
+    總出生數 = sum(出生數男, na.rm = TRUE) + sum(出生數女, na.rm = TRUE)
+  )
 
-total_112 <- data_112 %>%
-  summarise(總出生數 = sum(出生數計),
-            男生出生數 = sum(出生數男),
-            女生出生數 = sum(出生數女)) %>%
-  mutate(年份 = "112年")
+# 準備長條圖資料
+bar_data <- total_births %>%
+  pivot_longer(cols = c(出生數男, 出生數女), names_to = "性別", values_to = "數量")
 
-# 合併三個年份的資料
-total_births <- bind_rows(total_110, total_111, total_112)
+# 準備折線圖資料（僅包含總出生數）
+line_data <- total_births %>%
+  select(年份, 總出生數) %>%
+  mutate(年齡層 = "總出生數", 數量 = 總出生數) %>%
+  select(-總出生數)
 
-# 轉換資料框格式，將出生數分為男生和女生
-total_births_long <- total_births %>%
-  pivot_longer(cols = c(男生出生數, 女生出生數), 
-               names_to = "性別", values_to = "出生數")
+# 顏色設置（折線圖顏色為黑色，因為只有總出生數）
+line_colors <- c("總出生數" = "black")
 
-# 繪製堆疊長條圖
-ggplot(total_births_long, aes(x = 年份, y = 出生數, fill = 性別)) + 
-  geom_bar(stat = "identity", position = "stack") +  # 堆疊顯示
-  labs(x = "年份", y = "總出生數", title = "台南市每年出生數按性別分組") +  # 標題與軸標籤
-  scale_fill_manual(values = c("男生出生數" = "blue", "女生出生數" = "pink")) +  # 設定顏色
-  theme_minimal() +  # 使用簡潔的圖形風格
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # 調整x軸標籤角度
+# 繪製圖表
+ggplot() +
+  # 長條圖部分
+  geom_bar(
+    data = bar_data,
+    aes(x = 年份, y = 數量, fill = 性別),
+    stat = "identity",
+    position = position_dodge(width = 0.8),
+    width = 0.7
+  ) +
+  # 折線圖部分（只顯示總出生數的折線圖）
+  geom_line(
+    data = line_data,
+    aes(x = 年份, y = 數量, group = 年齡層, color = 年齡層),
+    size = 1.2,
+    inherit.aes = FALSE
+  ) +
+  geom_point(
+    data = line_data,
+    aes(x = 年份, y = 數量, color = 年齡層),
+    size = 2,
+    inherit.aes = FALSE
+  ) +
+  # 標籤與主題
+  labs(
+    x = "年份",
+    y = "數量",
+    title = "台南市各年份出生數與總出生數變化（長條圖與折線圖）",
+    fill = "性別",
+    color = "年齡層"
+  ) +
+  scale_fill_manual(values = c("pink","blue" )) +  # 長條圖顏色
+  scale_color_manual(values = line_colors) +  # 折線圖顏色
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_text(size = 10),
+    legend.text = element_text(size = 8),
+    legend.position = "bottom"
+  ) +
+  theme(legend.key.size = unit(0.6, "cm"))  # 調整圖例大小
+
 
